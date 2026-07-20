@@ -9,7 +9,7 @@ export function PowerSwitch({ on, onToggle }: Props) {
       <button
         type="button"
         onClick={onToggle}
-        className="relative w-14 h-8 rounded-sm border-2 border-[#4a4038] transition-colors"
+        className="relative w-16 h-10 min-w-[44px] min-h-[44px] rounded-sm border-2 border-[#4a4038] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffb020]"
         style={{
           background: on
             ? "linear-gradient(180deg, #4a2020 0%, #2a1010 100%)"
@@ -17,12 +17,12 @@ export function PowerSwitch({ on, onToggle }: Props) {
           boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
         }}
         aria-pressed={on}
-        aria-label={on ? "Выключить" : "Включить"}
+        aria-label={on ? "Выключить питание / Power off" : "Включить питание / Power on"}
       >
         <div
-          className="absolute top-0.5 bottom-0.5 w-6 rounded-sm transition-all duration-150"
+          className="absolute top-1 bottom-1 w-7 rounded-sm transition-all duration-150"
           style={{
-            left: on ? "calc(100% - 26px)" : "2px",
+            left: on ? "calc(100% - 30px)" : "4px",
             background: on
               ? "linear-gradient(180deg, #c41e3a, #8a1020)"
               : "linear-gradient(180deg, #6a6058, #3a3228)",
@@ -36,6 +36,7 @@ export function PowerSwitch({ on, onToggle }: Props) {
           style={{
             boxShadow: on ? undefined : "inset 0 1px 2px rgba(0,0,0,0.8)",
           }}
+          aria-hidden
         />
         <span className="text-[9px] tracking-[0.15em] uppercase text-[#8a7a60]">
           СЕТЬ / POWER

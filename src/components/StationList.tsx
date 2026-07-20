@@ -1,14 +1,21 @@
-import { stationsForBand, type Band, type Station } from "../lib/stations";
+import { STATIONS, stationsForBand, type Band, type Station } from "../lib/stations";
 
 type Props = {
   band: Band;
   stationId: string;
   powered: boolean;
   onSelect: (id: string) => void;
+  showAll?: boolean;
 };
 
-export function StationList({ band, stationId, powered, onSelect }: Props) {
-  const list = stationsForBand(band);
+export function StationList({
+  band,
+  stationId,
+  powered,
+  onSelect,
+  showAll = false,
+}: Props) {
+  const list = showAll ? STATIONS : stationsForBand(band);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -19,6 +26,11 @@ export function StationList({ band, stationId, powered, onSelect }: Props) {
         <span className="text-[9px] text-[#6a5a48]">{list.length}</span>
       </div>
       <div className="station-scroll flex-1 overflow-y-auto max-h-52 sm:max-h-64 space-y-1 pr-1">
+        {list.length === 0 && (
+          <div className="text-[11px] text-[#6a5a48] py-4 text-center">
+            Нет станций в диапазоне · No stations on this band
+          </div>
+        )}
         {list.map((s: Station) => {
           const active = s.id === stationId && powered;
           return (
@@ -27,7 +39,7 @@ export function StationList({ band, stationId, powered, onSelect }: Props) {
               type="button"
               disabled={!powered}
               onClick={() => onSelect(s.id)}
-              className={`w-full text-left rounded px-2.5 py-2 transition-all border ${
+              className={`w-full text-left rounded px-2.5 py-2.5 min-h-[44px] transition-all border ${
                 active
                   ? "border-[#c41e3a] bg-[#2a1a12]"
                   : "border-transparent bg-[#1a1510]/hover:bg-[#221c16] hover:border-[#3a3228]"
