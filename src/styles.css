@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bakelite: #2a2118;
+  --color-bakelite-dark: #1a1510;
+  --color-bakelite-light: #3d3228;
+  --color-steel: #8a9099;
+  --color-steel-dark: #5a6068;
+  --color-steel-shine: #c5c9ce;
+  --color-ivory: #e8dcc4;
+  --color-ivory-aged: #d4c4a8;
+  --color-signal-red: #c41e3a;
+  --color-amber-valve: #ffb020;
+  --color-amber-glow: #ffcc55;
+  --color-amber-dim: #a86a10;
+  --color-wood: #4a3424;
+  --color-wood-dark: #2e2016;
+  --font-display: "Segoe UI", "PT Sans", "DejaVu Sans", system-ui, sans-serif;
+  --font-dial: "Courier New", "Liberation Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-display);
+  background:
+    radial-gradient(ellipse at 30% 20%, #3a3028 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, #1a1210 0%, transparent 45%),
+    linear-gradient(160deg, #1c1612 0%, #0c0a08 100%);
+  color: var(--color-ivory);
+  overflow-x: hidden;
+}
+
+/* Physical knob cursor */
+.knob-grab {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.knob-grab:active {
+  cursor: grabbing;
+}
+
+/* Amber valve flicker */
+@keyframes valve-flicker {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  40% {
+    opacity: 0.92;
+    filter: brightness(1.08);
+  }
+  60% {
+    opacity: 0.97;
+    filter: brightness(0.95);
+  }
+}
+
+.valve-on {
+  animation: valve-flicker 2.4s ease-in-out infinite;
+}
+
+/* Signal needle sway */
+@keyframes needle-sway {
+  0%,
+  100% {
+    transform: rotate(var(--needle-angle, -40deg));
+  }
+  50% {
+    transform: rotate(calc(var(--needle-angle, -40deg) + 3deg));
+  }
+}
+
+.needle-live {
+  animation: needle-sway 1.6s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+/* Soft amber dial bloom */
+.dial-glow {
+  box-shadow:
+    inset 0 0 30px rgba(255, 176, 32, 0.25),
+    inset 0 0 8px rgba(255, 200, 80, 0.15),
+    0 0 24px rgba(255, 176, 32, 0.12);
+}
+
+.dial-glow-off {
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Speaker grille holes */
+.grille {
+  background-image: radial-gradient(
+    circle at center,
+    #0a0806 28%,
+    transparent 30%
+  );
+  background-size: 10px 10px;
+  background-color: #1a1410;
+}
+
+/* Scrollbar for station list */
+.station-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.station-scroll::-webkit-scrollbar-track {
+  background: #1a1510;
+}
+.station-scroll::-webkit-scrollbar-thumb {
+  background: #5a4a38;
+  border-radius: 3px;
+}
+
+/* Power pilot lamp */
+@keyframes pilot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px #c41e3a, 0 0 14px rgba(196, 30, 58, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 10px #ff3040, 0 0 22px rgba(255, 48, 64, 0.7);
+  }
+}
+.pilot-on {
+  animation: pilot-pulse 1.8s ease-in-out infinite;
+}
