@@ -8,7 +8,9 @@ if curl -sf -o /dev/null http://127.0.0.1:8080/; then
 fi
 
 if [ ! -d node_modules ]; then
+  echo "Installing dependencies..."
   npm install
 fi
 
+echo "Starting Soviet Radio on 0.0.0.0:8080..."
 npm run dev

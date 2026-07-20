@@ -1,1 +1,48 @@
-/**\n * SPA fallback entry — used when running as pure Vite client.\n * TanStack Start also mounts via its own SSR/client pipeline.\n */\nimport { StrictMode } from \"react\";\nimport { createRoot } from \"react-dom/client\";\nimport { RouterProvider, createRouter } from \"@tanstack/react-router\";\nimport { routeTree } from \"./routeTree.gen\";\nimport \"./styles.css\";\n\nconst router = createRouter({\n  routeTree,\n  defaultPreload: \"intent\",\n});\n\ndeclare module \"@tanstack/react-router\" {\n  interface Register {\n    router: typeof router;\n  }\n}\n\nconst rootEl = document.getElementById(\"root\");\nif (rootEl) {\n  createRoot(rootEl).render(\n    <StrictMode>\n      <RouterProvider router={router} />\n    </StrictMode>,\n  );\n}\n
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  RouterProvider,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { Radio } from "./components/Radio";
+import "./styles.css";
+
+const rootRoute = createRootRoute({
+  component: () => (
+    <main className="min-h-screen">
+      <Radio />
+    </main>
+  ),
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: () => null,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute]);
+
+const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+});
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
+const rootEl = document.getElementById("root");
+if (!rootEl) {
+  throw new Error("Root element #root not found");
+}
+
+createRoot(rootEl).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
+);
