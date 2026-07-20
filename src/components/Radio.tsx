@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useRadioStore } from "../lib/radio-store";
-import { stationsForBand } from "../lib/stations";
+import { STATIONS, stationsForBand } from "../lib/stations";
 import { Knob } from "./Knob";
 import { FrequencyDial } from "./FrequencyDial";
 import { SignalMeter } from "./SignalMeter";
@@ -29,7 +29,8 @@ export function Radio() {
   const selectStation = useRadioStore((s) => s.selectStation);
   const setStatus = useRadioStore((s) => s.setStatus);
   const setSignal = useRadioStore((s) => s.setSignal);
-  const station = useRadioStore((s) => s.currentStation)();
+
+  const station = STATIONS.find((s) => s.id === stationId) ?? STATIONS[0];
 
   // Create audio element once
   useEffect(() => {
@@ -47,23 +48,18 @@ export function Radio() {
       setStatus("error", "Stream unavailable");
       setSignal(5);
     };
-    const onPause = () => {
-      if (!useRadioStore.getState().powered) return;
-      // ignore intermediate pauses
-    };
 
     audio.addEventListener("playing", onPlaying);
     audio.addEventListener("waiting", onWaiting);
     audio.addEventListener("error", onError);
-    audio.addEventListener("pause", onPause);
 
     return () => {
       audio.pause();
-      audio.src = "";
+      audio.removeAttribute("src");
+      audio.load();
       audio.removeEventListener("playing", onPlaying);
       audio.removeEventListener("waiting", onWaiting);
       audio.removeEventListener("error", onError);
-      audio.removeEventListener("pause", onPause);
       audioRef.current = null;
     };
   }, [setStatus, setSignal]);
@@ -103,12 +99,12 @@ export function Radio() {
       });
     }
 
-    // Live signal meter sway while playing
     if (signalTimer.current) window.clearInterval(signalTimer.current);
     signalTimer.current = window.setInterval(() => {
       const st = useRadioStore.getState().status;
+      const vol = useRadioStore.getState().volume;
       if (st === "playing") {
-        setSignal(50 + Math.random() * 40 + volume * 10);
+        setSignal(50 + Math.random() * 40 + vol * 10);
       } else if (st === "loading") {
         setSignal(15 + Math.random() * 25);
       }
@@ -120,9 +116,8 @@ export function Radio() {
         signalTimer.current = null;
       }
     };
-  }, [powered, stationId, station.streamUrl, setStatus, setSignal, volume]);
+  }, [powered, stationId, station.streamUrl, setStatus, setSignal]);
 
-  // Tuning knob snaps to nearest station in band
   const onTuningChange = (v: number) => {
     setTuning(v * 100);
     if (!powered) return;
@@ -145,7 +140,6 @@ export function Radio() {
 
   return (
     <div className="w-full max-w-3xl mx-auto px-3 py-6 sm:py-10">
-      {/* Room plate */}
       <div className="mb-4 text-center">
         <h1 className="text-lg sm:text-xl tracking-[0.35em] uppercase text-[#c4b498] font-semibold">
           РАДИО «МАЯК»
@@ -155,7 +149,6 @@ export function Radio() {
         </p>
       </div>
 
-      {/* Chassis */}
       <div
         className="relative rounded-xl p-4 sm:p-6"
         style={{
@@ -165,7 +158,6 @@ export function Radio() {
             "0 20px 50px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 8px rgba(0,0,0,0.4), 0 0 0 1px #1a1410, 0 0 0 4px #3a2e24, 0 0 0 5px #1a1410",
         }}
       >
-        {/* Brand plate */}
         <div className="flex items-start justify-between mb-4 gap-3">
           <div>
             <div
@@ -180,10 +172,9 @@ export function Radio() {
               СССР · ЗАВОД № 12
             </div>
             <div className="mt-1.5 text-[9px] tracking-widest text-[#6a5a48]">
-              ВЕРХОГОВИНА · MADE IN USSR
+              ВЕРХОВИНА · MADE IN USSR
             </div>
           </div>
-          {/* Valve tube glow */}
           <div className="flex items-center gap-2">
             <div
               className={`w-3 h-8 rounded-full ${powered ? "valve-on" : ""}`}
@@ -205,7 +196,6 @@ export function Radio() {
           </div>
         </div>
 
-        {/* Dial + meter row */}
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 mb-4">
           <FrequencyDial
             station={station}
@@ -222,12 +212,10 @@ export function Radio() {
           </div>
         </div>
 
-        {/* Speaker */}
         <div className="mb-5">
           <SpeakerGrille active={powered && status === "playing"} volume={volume} />
         </div>
 
-        {/* Controls row */}
         <div
           className="rounded-lg p-3 sm:p-4 mb-4"
           style={{
@@ -237,10 +225,7 @@ export function Radio() {
           }}
         >
           <div className="flex flex-wrap items-end justify-between gap-4 sm:gap-6">
-            <PowerSwitch
-              on={powered}
-              onToggle={() => setPowered(!powered)}
-            />
+            <PowerSwitch on={powered} onToggle={() => setPowered(!powered)} />
             <BandSelector band={band} powered={powered} onChange={onBandChange} />
             <Knob
               label="VOLUME"
@@ -261,7 +246,6 @@ export function Radio() {
           </div>
         </div>
 
-        {/* Station list panel */}
         <div
           className="rounded-lg p-3 sm:p-4"
           style={{
@@ -277,12 +261,11 @@ export function Radio() {
           />
           {errorMsg && powered && (
             <div className="mt-2 text-[10px] text-[#c41e3a] tracking-wide">
-              ❗ {errorMsg}
+              ⚠ {errorMsg}
             </div>
           )}
         </div>
 
-        {/* Foot screws / serial */}
         <div className="mt-4 flex items-center justify-between text-[8px] tracking-[0.2em] text-[#4a4030]">
           <span>● ● ●</span>
           <span>СЕР. № РВ-1968-7741 · 220V 50Hz</span>
@@ -291,8 +274,8 @@ export function Radio() {
       </div>
 
       <p className="mt-5 text-center text-[10px] text-[#5a4a38] leading-relaxed max-w-md mx-auto">
-        Включите питание, выберите диапазон и канал.
-        Streams via SomaFM · HTML5 Audio · Drag knobs vertically.
+        Включите питание, выберите диапазон и канал. Streams via SomaFM · HTML5
+        Audio · Drag knobs vertically.
       </p>
     </div>
   );

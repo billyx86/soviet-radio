@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Outlet,
   RouterProvider,
   createRootRoute,
   createRoute,
@@ -12,7 +13,7 @@ import "./styles.css";
 const rootRoute = createRootRoute({
   component: () => (
     <main className="min-h-screen">
-      <Radio />
+      <Outlet />
     </main>
   ),
 });
@@ -20,7 +21,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => null,
+  component: Radio,
 });
 
 const routeTree = rootRoute.addChildren([indexRoute]);
