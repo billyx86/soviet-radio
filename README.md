@@ -2,7 +2,7 @@
 
 A bakelite-and-amber Soviet-era shortwave radio web app with **real** HTML5 internet radio streams.
 
-![stack](https://img.shields.io/badge/React_19-Vite_6-amber) ![audio](https://img.shields.io/badge/HTML5_Audio-SomaFM-red)
+![stack](https://img.shields.io/badge/React_19-Vite_6-amber) ![audio](https://img.shields.io/badge/HTML5_Audio-SomaFM-red) [![CI](https://github.com/billyx86/soviet-radio/actions/workflows/ci.yml/badge.svg)](https://github.com/billyx86/soviet-radio/actions/workflows/ci.yml)
 
 ## Quick start
 
@@ -24,7 +24,9 @@ chmod +x startup.sh && ./startup.sh
 - **S-meter** with live needle sway while playing
 - **Speaker grille** visual
 - **Cyrillic + English** panel labels
+- **Volume remembered** across reloads (localStorage)
 - **12 working stations** via SomaFM HTTPS streams, presented as Soviet shortwave channels
+- **CI** — typecheck, tests and build on every push/PR
 
 ## How to use
 
