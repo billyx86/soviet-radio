@@ -46,9 +46,13 @@ export const useRadioStore = create<RadioState>((set, get) => ({
   selectStation: (id) => {
     const st = STATIONS.find((s) => s.id === id);
     if (!st) return;
-    // Map frequency into dial position roughly
-    const idx = STATIONS.findIndex((s) => s.id === id);
-    const tuning = (idx / Math.max(1, STATIONS.length - 1)) * 100;
+    // Map frequency into dial position, relative to the station's own band —
+    // the TUNING knob walks stations within the current band, so the dial
+    // pointer must agree with it (global indexing disagreed: e.g. the 4th
+    // UKV station mapped to ~80% of the dial).
+    const list = STATIONS.filter((s) => s.band === st.band);
+    const idx = list.findIndex((s) => s.id === id);
+    const tuning = (idx / Math.max(1, list.length - 1)) * 100;
     set({ stationId: id, band: st.band, tuning, status: "loading", errorMsg: null });
   },
   setStatus: (s, err = null) => set({ status: s, errorMsg: err }),
