@@ -1,6 +1,20 @@
 import { create } from "zustand";
 import { STATIONS, type Band, type Station } from "./stations";
 
+const VOLUME_KEY = "soviet-radio-volume";
+
+function loadVolume(): number {
+  if (typeof window === "undefined") return 0.65;
+  try {
+    const raw = window.localStorage.getItem(VOLUME_KEY);
+    if (raw == null) return 0.65;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.65;
+  } catch {
+    return 0.65;
+  }
+}
+
 export type PlayStatus = "idle" | "loading" | "playing" | "error";
 
 type RadioState = {
@@ -25,7 +39,7 @@ type RadioState = {
 
 export const useRadioStore = create<RadioState>((set, get) => ({
   powered: false,
-  volume: 0.65,
+  volume: loadVolume(),
   tuning: 35,
   band: "SV",
   stationId: STATIONS[0].id,
@@ -40,7 +54,17 @@ export const useRadioStore = create<RadioState>((set, get) => ({
       signal: v ? get().signal : 0,
       errorMsg: v ? get().errorMsg : null,
     }),
-  setVolume: (v) => set({ volume: Math.min(1, Math.max(0, v)) }),
+  setVolume: (v) => {
+    const volume = Math.min(1, Math.max(0, v));
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(VOLUME_KEY, String(volume));
+      } catch {
+        // private mode / storage full — state still updates in-memory
+      }
+    }
+    set({ volume });
+  },
   setTuning: (v) => set({ tuning: Math.min(100, Math.max(0, v)) }),
   setBand: (b) => set({ band: b }),
   selectStation: (id) => {
