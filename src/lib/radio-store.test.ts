@@ -1,8 +1,8 @@
 // window/localStorage shim lives in src/test/setup.ts (vitest setupFiles),
 // which runs before module imports.
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { STATIONS } from "./stations";
-import { useRadioStore } from "./radio-store";
+import { useRadioStore, loadPersistedState } from "./radio-store";
 
 function resetStore() {
   useRadioStore.setState({
@@ -98,5 +98,145 @@ describe("radio-store", () => {
     expect(
       useRadioStore.getState().currentStation().id,
     ).toBe(useRadioStore.getState().stationId);
+  });
+});
+
+// Issue #7: last station, band, tuning and power must survive a reload.
+// loadPersistedState() is the store's hydration source, so it is exercised
+// directly against the localStorage shim; the store itself is re-created in a
+// fresh module instance to prove the initializer reads it back.
+describe("radio-store persistence (issue #7)", () => {
+  const LS = (window as unknown as { localStorage: Storage }).localStorage;
+
+  const ukv = STATIONS.find((s) => s.band === "UKV")!;
+
+  beforeEach(() => {
+    LS.clear();
+    resetStore();
+  });
+
+  function readState(): Record<string, unknown> {
+    const raw = LS.getItem("soviet-radio-state");
+    expect(raw).not.toBeNull();
+    return JSON.parse(raw!);
+  }
+
+  it("persists station, band, tuning and power to soviet-radio-state", () => {
+    useRadioStore.getState().selectStation(ukv.id);
+    useRadioStore.getState().setTuning(72);
+    useRadioStore.getState().setPowered(true);
+
+    const s = readState();
+    expect(s.stationId).toBe(ukv.id);
+    expect(s.band).toBe("UKV");
+    expect(s.tuning).toBe(72);
+    expect(s.powered).toBe(true);
+  });
+
+  it("persists volume under its own key, separately from the state", () => {
+    useRadioStore.getState().selectStation(ukv.id);
+    useRadioStore.getState().setVolume(0.3);
+    expect(LS.getItem("soviet-radio-volume")).toBe("0.3");
+    // Volume, playback status and signal must not leak into the state blob.
+    const state = JSON.parse(LS.getItem("soviet-radio-state")!);
+    expect(state).not.toHaveProperty("volume");
+    expect(state).not.toHaveProperty("status");
+    expect(state).not.toHaveProperty("signal");
+  });
+
+  it("hydrates stored station/band/tuning/power on re-init (round-trip)", async () => {
+    // Simulate the listener tuning in, then "reloading" the page (fresh module).
+    useRadioStore.getState().selectStation(ukv.id);
+    useRadioStore.getState().setTuning(48);
+    useRadioStore.getState().setPowered(true);
+
+    vi.resetModules();
+    const fresh = await import("./radio-store");
+    expect(fresh.useRadioStore.getState().stationId).toBe(ukv.id);
+    expect(fresh.useRadioStore.getState().band).toBe("UKV");
+    expect(fresh.useRadioStore.getState().tuning).toBe(48);
+    expect(fresh.useRadioStore.getState().powered).toBe(true);
+    // Playback state is not persisted — the radio boots idle.
+    expect(fresh.useRadioStore.getState().status).toBe("idle");
+    expect(fresh.useRadioStore.getState().signal).toBe(0);
+  });
+
+  it("falls back to defaults when no state is stored", () => {
+    const p = loadPersistedState();
+    expect(p).toEqual({
+      powered: false,
+      tuning: 35,
+      band: "SV",
+      stationId: STATIONS[0].id,
+    });
+  });
+
+  it("ignores a stored station id that no longer exists", () => {
+    LS.setItem(
+      "soviet-radio-state",
+      JSON.stringify({
+        powered: true,
+        tuning: 50,
+        band: "UKV",
+        stationId: "deleted-station",
+      }),
+    );
+    const p = loadPersistedState();
+    expect(p.stationId).toBe(STATIONS[0].id);
+    expect(p.band).toBe("SV");
+  });
+
+  it("repairs a stored band that disagrees with the station's band", () => {
+    LS.setItem(
+      "soviet-radio-state",
+      JSON.stringify({ powered: false, tuning: 10, band: "DV", stationId: ukv.id }),
+    );
+    const p = loadPersistedState();
+    expect(p.stationId).toBe(ukv.id);
+    expect(p.band).toBe("UKV"); // station's own band wins
+  });
+
+  it("clamps a stored tuning out of 0..100", () => {
+    LS.setItem("soviet-radio-state", JSON.stringify({ tuning: 250 }));
+    expect(loadPersistedState().tuning).toBe(100);
+    LS.setItem("soviet-radio-state", JSON.stringify({ tuning: -40 }));
+    expect(loadPersistedState().tuning).toBe(0);
+  });
+
+  it("rejects a non-boolean powered value", () => {
+    LS.setItem(
+      "soviet-radio-state",
+      JSON.stringify({ powered: "yes", tuning: 10, band: "SV", stationId: STATIONS[0].id }),
+    );
+    expect(loadPersistedState().powered).toBe(false);
+  });
+
+  it("falls back to defaults for corrupt JSON", () => {
+    LS.setItem("soviet-radio-state", "{not valid json!!");
+    const p = loadPersistedState();
+    expect(p).toEqual({
+      powered: false,
+      tuning: 35,
+      band: "SV",
+      stationId: STATIONS[0].id,
+    });
+  });
+
+  it("falls back to defaults when the value is not an object", () => {
+    LS.setItem("soviet-radio-state", "42");
+    expect(loadPersistedState().stationId).toBe(STATIONS[0].id);
+    LS.setItem("soviet-radio-state", "null");
+    expect(loadPersistedState().band).toBe("SV");
+  });
+
+  it("survives a throwing localStorage (private mode)", () => {
+    const spy = vi.spyOn(LS, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    // Must not throw; in-memory state still updates.
+    expect(() => useRadioStore.getState().setTuning(66)).not.toThrow();
+    expect(useRadioStore.getState().tuning).toBe(66);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
