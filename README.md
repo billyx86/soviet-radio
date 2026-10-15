@@ -14,6 +14,34 @@ chmod +x startup.sh && ./startup.sh
 # or: npm run dev   →  http://0.0.0.0:8080
 ```
 
+`startup.sh` serves the **production build** (`vite preview`) when one exists or
+can be built, and falls back to the **dev server** if the build fails. See
+*Running in production* below for the explicit mode overrides.
+
+## Running in production
+
+`startup.sh` builds and serves the production bundle by default:
+
+```bash
+./startup.sh                 # auto: prod build if possible, else dev
+```
+
+Control it with two environment variables:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `SOVIET_RADIO_MODE` | `auto` | `auto` = production build if `dist/` exists or can be built, else dev server; `dev` = always the Vite dev server (hot reload); `prod` = always the production build, hard-fail if it cannot be built |
+| `SOVIET_RADIO_LOG` | `/tmp/soviet-radio.log` | Where the server logs are written |
+
+```bash
+SOVIET_RADIO_MODE=dev ./startup.sh          # force dev server
+SOVIET_RADIO_MODE=prod ./startup.sh         # force prod, fail loudly on build error
+SOVIET_RADIO_LOG=/var/log/radio.log ./startup.sh
+```
+
+Both modes listen on `0.0.0.0:8080`. If something is already listening on
+8080, `startup.sh` is a no-op (it assumes the app is already up).
+
 ## Features
 
 - **Bakelite / wood chassis** aesthetic (charcoal, steel, aged ivory, signal red, amber valve)
@@ -49,9 +77,10 @@ chmod +x startup.sh && ./startup.sh
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Dev server on `0.0.0.0:8080` |
-| `npm run build` | Production build |
+| `npm run build` | Production build (emits `dist/`) |
+| `npm run preview` | Serve the production build on `0.0.0.0:8080` |
 | `npm run typecheck` | TypeScript check |
-| `./startup.sh` | Start dev if not already up |
+| `./startup.sh` | Serve prod build (or fall back to dev) on `0.0.0.0:8080`; no-op if 8080 is already up. See *Running in production* |
 
 ## Streams
 
