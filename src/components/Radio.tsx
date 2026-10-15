@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useRadioStore } from "../lib/radio-store";
 import { STATIONS, stationsForBand } from "../lib/stations";
 import { signalFromFrequencyData, smoothSignal } from "../lib/signal";
+import { resolveAudioContextCtor, SignalGraph } from "../lib/signal-graph";
 import { Knob } from "./Knob";
 import { FrequencyDial } from "./FrequencyDial";
 import { SignalMeter } from "./SignalMeter";
@@ -13,10 +14,11 @@ import { PowerSwitch } from "./PowerSwitch";
 export function Radio() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const signalTimer = useRef<number | null>(null);
-  // Real-signal path (issue #8): WebAudio analyser + smoothing state.
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  // Real-signal path (issues #8, #13): one WebAudio graph per audio element.
+  // SignalGraph enforces that createMediaElementSource runs at most ONCE per
+  // element — re-creating the graph per effect run (the old behaviour) threw
+  // InvalidStateError on the second station and left the element silent.
+  const graphRef = useRef<SignalGraph | null>(null);
   const freqDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const smoothedSignalRef = useRef(0);
 
@@ -45,6 +47,9 @@ export function Radio() {
     audio.crossOrigin = "anonymous";
     audio.preload = "none";
     audioRef.current = audio;
+    // One graph per element for the app's lifetime (issue #13).
+    const graph = new SignalGraph(audio, resolveAudioContextCtor());
+    graphRef.current = graph;
 
     const onPlaying = () => {
       setStatus("playing");
@@ -67,6 +72,10 @@ export function Radio() {
       audio.removeEventListener("playing", onPlaying);
       audio.removeEventListener("waiting", onWaiting);
       audio.removeEventListener("error", onError);
+      // The element is being destroyed — release its audio graph (the
+      // element's MediaElementSourceNode is bound to it permanently).
+      graph.close();
+      graphRef.current = null;
       audioRef.current = null;
     };
   }, [setStatus, setSignal]);
@@ -80,29 +89,18 @@ export function Radio() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    const graph = graphRef.current;
 
-    // Tear down the real-signal graph (issue #8). Idempotent; used on
-    // power-off and on station change.
-    const stopGraph = () => {
+    // Stop the S-meter sampling loop and drop the analyser. The audio
+    // element stays live: when analysis is dropped, SignalGraph re-routes
+    // source → destination so the speaker never goes silent (issue #13).
+    const stopMeter = () => {
       if (signalTimer.current) {
         window.clearInterval(signalTimer.current);
         signalTimer.current = null;
       }
-      if (sourceRef.current) {
-        try {
-          sourceRef.current.disconnect();
-        } catch {
-          /* already disconnected */
-        }
-        sourceRef.current = null;
-      }
-      analyserRef.current = null;
+      if (graph) graph.detachAnalyser();
       freqDataRef.current = null;
-      if (audioCtxRef.current) {
-        const ctx = audioCtxRef.current;
-        audioCtxRef.current = null;
-        if (ctx.state !== "closed") void ctx.close().catch(() => {});
-      }
       smoothedSignalRef.current = 0;
     };
 
@@ -110,7 +108,7 @@ export function Radio() {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
-      stopGraph();
+      stopMeter();
       setStatus("idle");
       setSignal(0);
       return;
@@ -145,75 +143,56 @@ export function Radio() {
       });
     }
 
-    const AudioCtxCtor: typeof AudioContext | undefined =
-      typeof window !== "undefined"
-        ? (window.AudioContext ??
-          (window as unknown as {
-            webkitAudioContext?: typeof AudioContext;
-          }).webkitAudioContext)
-        : undefined;
-
-    if (!AudioCtxCtor) {
+    if (!graph || !graph.ensure()) {
+      // No AudioContext available — simulate.
       startSimulated();
-    } else {
-      try {
-        const ctx = new AudioCtxCtor();
-        const source = ctx.createMediaElementSource(audio);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256; // 128 bins — plenty for an S-meter
-        analyser.smoothingTimeConstant = 0.6;
-        // IMPORTANT: createMediaElementSource reroutes the element's output
-        // through the graph, so the analyser MUST stay connected to the
-        // destination or the radio goes silent. The analyser is a pass-through.
-        source.connect(analyser);
-        analyser.connect(ctx.destination);
-        audioCtxRef.current = ctx;
-        sourceRef.current = source;
-        analyserRef.current = analyser;
-        freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
-        if (ctx.state === "suspended") void ctx.resume().catch(() => {});
-
-        let zeroTicks = 0;
-        signalTimer.current = window.setInterval(() => {
-          const st = useRadioStore.getState().status;
-          if (st !== "playing") {
-            if (st === "loading") setSignal(15 + Math.random() * 25);
-            return;
-          }
-          const a = analyserRef.current;
-          const data = freqDataRef.current;
-          if (!a || !data) return;
-          a.getByteFrequencyData(data);
-          const raw = signalFromFrequencyData(data);
-          if (raw < 1) {
-            // Audible-but-silent analyser = CORS-tainted element. After ~6 s
-            // of that, give up and use the simulated fallback.
-            zeroTicks += 1;
-            if (zeroTicks >= 15) {
-              if (signalTimer.current) window.clearInterval(signalTimer.current);
-              signalTimer.current = null;
-              sourceRef.current = null;
-              analyserRef.current = null;
-              startSimulated();
-              return;
-            }
-          } else {
-            zeroTicks = 0;
-          }
-          smoothedSignalRef.current = smoothSignal(
-            smoothedSignalRef.current,
-            raw,
-          );
-          setSignal(Math.round(smoothedSignalRef.current));
-        }, 400);
-      } catch {
-        // WebAudio wiring failed (tainted element, etc.) — simulate.
-        startSimulated();
-      }
+      return () => stopMeter();
     }
 
+    const analyser = graph.attachAnalyser();
+    if (!analyser) {
+      // Graph wiring failed — element is still audible via the fallback
+      // route, but we cannot read it; simulate the needle.
+      startSimulated();
+      return () => stopMeter();
+    }
+    graph.resume();
+    freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+
+    let zeroTicks = 0;
+    signalTimer.current = window.setInterval(() => {
+      const st = useRadioStore.getState().status;
+      if (st !== "playing") {
+        if (st === "loading") setSignal(15 + Math.random() * 25);
+        return;
+      }
+      const a = graph.analyser;
+      const data = freqDataRef.current;
+      if (!a || !data) return;
+      a.getByteFrequencyData(data);
+      const raw = signalFromFrequencyData(data);
+      if (raw < 1) {
+        // Audible-but-silent analyser = CORS-tainted element. After ~6 s
+        // of that, give up and use the simulated fallback.
+        zeroTicks += 1;
+        if (zeroTicks >= 15) {
+          if (signalTimer.current) window.clearInterval(signalTimer.current);
+          signalTimer.current = null;
+          startSimulated();
+          return;
+        }
+      } else {
+        zeroTicks = 0;
+      }
+      smoothedSignalRef.current = smoothSignal(
+        smoothedSignalRef.current,
+        raw,
+      );
+      setSignal(Math.round(smoothedSignalRef.current));
+    }, 400);
+
     return () => {
-      stopGraph();
+      stopMeter();
     };
   }, [powered, stationId, station.streamUrl, setStatus, setSignal]);
 
