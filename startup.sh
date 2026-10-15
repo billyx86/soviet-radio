@@ -2,6 +2,9 @@
 set -eu
 cd "$(dirname "$0")"
 
+# Log path is configurable (issue #9); keeps the historical default.
+LOG_FILE="${SOVIET_RADIO_LOG:-/tmp/soviet-radio.log}"
+
 if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:8080/; then
   exit 0
 fi
