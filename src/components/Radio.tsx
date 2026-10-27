@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useRadioStore } from "../lib/radio-store";
-import { STATIONS, stationsForBand } from "../lib/stations";
 import { signalFromFrequencyData, smoothSignal } from "../lib/signal";
 import { resolveAudioContextCtor, SignalGraph } from "../lib/signal-graph";
 import { Knob } from "./Knob";
@@ -8,6 +7,7 @@ import { FrequencyDial } from "./FrequencyDial";
 import { SignalMeter } from "./SignalMeter";
 import { SpeakerGrille } from "./SpeakerGrille";
 import { StationList } from "./StationList";
+import { StationEditor } from "./StationEditor";
 import { BandSelector } from "./BandSelector";
 import { PowerSwitch } from "./PowerSwitch";
 
@@ -29,6 +29,7 @@ export function Radio() {
   const stationId = useRadioStore((s) => s.stationId);
   const status = useRadioStore((s) => s.status);
   const signal = useRadioStore((s) => s.signal);
+  const signalSimulated = useRadioStore((s) => s.signalSimulated);
   const errorMsg = useRadioStore((s) => s.errorMsg);
 
   const setPowered = useRadioStore((s) => s.setPowered);
@@ -38,8 +39,13 @@ export function Radio() {
   const selectStation = useRadioStore((s) => s.selectStation);
   const setStatus = useRadioStore((s) => s.setStatus);
   const setSignal = useRadioStore((s) => s.setSignal);
+  const setSignalSimulated = useRadioStore((s) => s.setSignalSimulated);
+  const addStation = useRadioStore((s) => s.addStation);
+  const removeStation = useRadioStore((s) => s.removeStation);
+  const currentStation = useRadioStore((s) => s.currentStation);
+  const stationsForBand = useRadioStore((s) => s.stationsForBand);
 
-  const station = STATIONS.find((s) => s.id === stationId) ?? STATIONS[0];
+  const station = currentStation();
 
   // Create audio element once
   useEffect(() => {
@@ -102,6 +108,8 @@ export function Radio() {
       if (graph) graph.detachAnalyser();
       freqDataRef.current = null;
       smoothedSignalRef.current = 0;
+      // Sampler gone → the needle is neither real nor simulated anymore.
+      setSignalSimulated(false);
     };
 
     if (!powered) {
@@ -116,9 +124,11 @@ export function Radio() {
 
     // Simulated fallback (issue #8): used when WebAudio cannot tap the
     // element (no AudioContext, or a stream whose CORS policy taints it —
-    // the analyser then reads permanently silent).
+    // the analyser then reads permanently silent). The flag tells the UI to
+    // label the needle as synthetic (issue #15).
     const startSimulated = () => {
       if (signalTimer.current) window.clearInterval(signalTimer.current);
+      setSignalSimulated(true);
       signalTimer.current = window.setInterval(() => {
         const st = useRadioStore.getState().status;
         const vol = useRadioStore.getState().volume;
@@ -158,6 +168,9 @@ export function Radio() {
     }
     graph.resume();
     freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+    // Real analyser path is live → the needle reads the stream, not the
+    // fallback, so drop the SIM label (issue #15).
+    setSignalSimulated(false);
 
     let zeroTicks = 0;
     signalTimer.current = window.setInterval(() => {
@@ -286,6 +299,7 @@ export function Radio() {
               level={signal}
               powered={powered}
               playing={status === "playing"}
+              simulated={signalSimulated}
             />
           </div>
         </div>
@@ -336,7 +350,10 @@ export function Radio() {
             stationId={stationId}
             powered={powered}
             onSelect={selectStation}
+            stations={stationsForBand(band)}
+            onRemove={removeStation}
           />
+          <StationEditor powered={powered} onAdd={addStation} onSelect={selectStation} />
           {errorMsg && powered && (
             <div className="mt-2 text-[10px] text-[#c41e3a] tracking-wide">
               ⚠ {errorMsg}

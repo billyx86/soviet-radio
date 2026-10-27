@@ -14,6 +14,8 @@ function resetStore() {
     status: "idle",
     errorMsg: null,
     signal: 0,
+    signalSimulated: false,
+    userStations: [],
   });
 }
 
@@ -92,6 +94,26 @@ describe("radio-store", () => {
     expect(s.status).toBe("idle");
     expect(s.signal).toBe(0);
     expect(s.errorMsg).toBeNull();
+  });
+
+  it("power-off also clears the simulated-needle flag (issue #15)", () => {
+    useRadioStore.getState().setPowered(true);
+    useRadioStore.getState().setSignalSimulated(true);
+    expect(useRadioStore.getState().signalSimulated).toBe(true);
+    useRadioStore.getState().setPowered(false);
+    expect(useRadioStore.getState().signalSimulated).toBe(false);
+  });
+
+  it("setSignalSimulated toggles the flag without touching the level", () => {
+    useRadioStore.getState().setSignal(42);
+    useRadioStore.getState().setSignalSimulated(true);
+    let s = useRadioStore.getState();
+    expect(s.signalSimulated).toBe(true);
+    expect(s.signal).toBe(42);
+    useRadioStore.getState().setSignalSimulated(false);
+    s = useRadioStore.getState();
+    expect(s.signalSimulated).toBe(false);
+    expect(s.signal).toBe(42);
   });
 
   it("currentStation always resolves to a real station", () => {
@@ -238,5 +260,111 @@ describe("radio-store persistence (issue #7)", () => {
     expect(useRadioStore.getState().tuning).toBe(66);
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+// Issue #16: user-defined stations — store actions, merge visibility and
+// reload survival. The merge/validation rules themselves are covered in
+// user-stations.test.ts; here we exercise the store's wiring.
+describe("radio-store user stations (issue #16)", () => {
+  const LS = (window as unknown as { localStorage: Storage }).localStorage;
+
+  beforeEach(() => {
+    LS.clear();
+    resetStore();
+  });
+
+  function validInput() {
+    return {
+      name: "Маяк-Дом",
+      band: "KV" as const,
+      frequency: 12.34,
+      streamUrl: "https://example.com/stream.mp3",
+    };
+  }
+
+  it("addStation validates before touching state", () => {
+    const res = useRadioStore.getState().addStation({
+      ...validInput(),
+      name: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/required/);
+    expect(useRadioStore.getState().userStations).toEqual([]);
+  });
+
+  it("addStation persists to localStorage and merges into stationsForBand", () => {
+    const res = useRadioStore.getState().addStation(validInput());
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error("expected ok");
+    const state = useRadioStore.getState();
+    expect(state.userStations).toHaveLength(1);
+    expect(state.userStations[0]!.id).toBe(res.id);
+
+    // The new station appears in its band's merged list.
+    const kv = state.stationsForBand("KV");
+    expect(kv.some((s) => s.id === res.id)).toBe(true);
+    // ...and not in the other bands.
+    expect(state.stationsForBand("UKV").some((s) => s.id === res.id)).toBe(false);
+
+    // And it was written to the user-stations key.
+    const raw = LS.getItem("soviet-radio-user-stations");
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw!)).toHaveLength(1);
+  });
+
+  it("a user station tunes and selects like a built-in", () => {
+    const res = useRadioStore.getState().addStation(validInput());
+    if (!res.ok) throw new Error("expected ok");
+    useRadioStore.getState().selectStation(res.id);
+    const s = useRadioStore.getState();
+    expect(s.stationId).toBe(res.id);
+    expect(s.band).toBe("KV");
+    expect(s.status).toBe("loading");
+    // currentStation resolves the user record, not a built-in fallback.
+    expect(s.currentStation().id).toBe(res.id);
+    expect(s.currentStation().nameRu).toBe("Маяк-Дом");
+  });
+
+  it("a user station survives a reload (re-init round-trip)", async () => {
+    const res = useRadioStore.getState().addStation(validInput());
+    if (!res.ok) throw new Error("expected ok");
+    useRadioStore.getState().selectStation(res.id);
+
+    vi.resetModules();
+    const fresh = await import("./radio-store");
+    expect(fresh.useRadioStore.getState().stationId).toBe(res.id);
+    expect(fresh.useRadioStore.getState().currentStation().nameRu).toBe("Маяк-Дом");
+  });
+
+  it("removeStation drops it from state, list and storage", () => {
+    const res = useRadioStore.getState().addStation(validInput());
+    if (!res.ok) throw new Error("expected ok");
+    useRadioStore.getState().removeStation(res.id);
+    const s = useRadioStore.getState();
+    expect(s.userStations).toEqual([]);
+    expect(s.stationsForBand("KV").some((x) => x.id === res.id)).toBe(false);
+    expect(JSON.parse(LS.getItem("soviet-radio-user-stations")!)).toHaveLength(0);
+  });
+
+  it("removing the selected station falls back to the band's first station", () => {
+    const res = useRadioStore.getState().addStation(validInput());
+    if (!res.ok) throw new Error("expected ok");
+    useRadioStore.getState().selectStation(res.id);
+    useRadioStore.getState().removeStation(res.id);
+    const s = useRadioStore.getState();
+    // 12.34 MHz was the lowest KV dial-in, so the band's first merged
+    // station is now a built-in.
+    expect(s.stationId).not.toBe(res.id);
+    expect(s.currentStation().id).toBe(s.stationId);
+    expect(s.band).toBe("KV");
+  });
+
+  it("removeStation ignores unknown / built-in ids", () => {
+    useRadioStore.getState().addStation(validInput());
+    const before = useRadioStore.getState().userStations;
+    useRadioStore.getState().removeStation("orbit-12"); // built-in
+    useRadioStore.getState().removeStation("user-ghost");
+    expect(useRadioStore.getState().userStations).toEqual(before);
   });
 });
