@@ -14,6 +14,7 @@ function resetStore() {
     status: "idle",
     errorMsg: null,
     signal: 0,
+    signalSimulated: false,
   });
 }
 
@@ -92,6 +93,26 @@ describe("radio-store", () => {
     expect(s.status).toBe("idle");
     expect(s.signal).toBe(0);
     expect(s.errorMsg).toBeNull();
+  });
+
+  it("power-off also clears the simulated-needle flag (issue #15)", () => {
+    useRadioStore.getState().setPowered(true);
+    useRadioStore.getState().setSignalSimulated(true);
+    expect(useRadioStore.getState().signalSimulated).toBe(true);
+    useRadioStore.getState().setPowered(false);
+    expect(useRadioStore.getState().signalSimulated).toBe(false);
+  });
+
+  it("setSignalSimulated toggles the flag without touching the level", () => {
+    useRadioStore.getState().setSignal(42);
+    useRadioStore.getState().setSignalSimulated(true);
+    let s = useRadioStore.getState();
+    expect(s.signalSimulated).toBe(true);
+    expect(s.signal).toBe(42);
+    useRadioStore.getState().setSignalSimulated(false);
+    s = useRadioStore.getState();
+    expect(s.signalSimulated).toBe(false);
+    expect(s.signal).toBe(42);
   });
 
   it("currentStation always resolves to a real station", () => {

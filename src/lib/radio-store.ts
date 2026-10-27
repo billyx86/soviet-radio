@@ -78,6 +78,7 @@ type RadioState = {
   status: PlayStatus;
   errorMsg: string | null;
   signal: number; // 0..100 visual meter
+  signalSimulated: boolean; // true when the needle is a fallback, not a real analyser (issue #15)
 
   setPowered: (v: boolean) => void;
   setVolume: (v: number) => void;
@@ -86,6 +87,7 @@ type RadioState = {
   selectStation: (id: string) => void;
   setStatus: (s: PlayStatus, err?: string | null) => void;
   setSignal: (n: number) => void;
+  setSignalSimulated: (v: boolean) => void;
   currentStation: () => Station;
 };
 
@@ -121,12 +123,16 @@ export const useRadioStore = create<RadioState>((set, get) => {
     status: "idle",
     errorMsg: null,
     signal: 0,
+    signalSimulated: false,
 
     setPowered: (v) => {
       set({
         powered: v,
         status: v ? get().status : "idle",
         signal: v ? get().signal : 0,
+        // Power-off drops the analyser/sampler, so the needle can no longer
+        // be a live one; clear the simulated flag with it (issue #15).
+        signalSimulated: v ? get().signalSimulated : false,
         errorMsg: v ? get().errorMsg : null,
       });
       persistState();
@@ -165,6 +171,7 @@ export const useRadioStore = create<RadioState>((set, get) => {
     },
     setStatus: (s, err = null) => set({ status: s, errorMsg: err }),
     setSignal: (n) => set({ signal: Math.min(100, Math.max(0, n)) }),
+    setSignalSimulated: (v) => set({ signalSimulated: v }),
     currentStation: () => {
       const { stationId } = get();
       return STATIONS.find((s) => s.id === stationId) ?? STATIONS[0];
