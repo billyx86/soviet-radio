@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useRadioStore } from "../lib/radio-store";
-import { STATIONS, stationsForBand } from "../lib/stations";
 import { signalFromFrequencyData, smoothSignal } from "../lib/signal";
 import { resolveAudioContextCtor, SignalGraph } from "../lib/signal-graph";
 import { Knob } from "./Knob";
@@ -8,6 +7,7 @@ import { FrequencyDial } from "./FrequencyDial";
 import { SignalMeter } from "./SignalMeter";
 import { SpeakerGrille } from "./SpeakerGrille";
 import { StationList } from "./StationList";
+import { StationEditor } from "./StationEditor";
 import { BandSelector } from "./BandSelector";
 import { PowerSwitch } from "./PowerSwitch";
 
@@ -40,8 +40,12 @@ export function Radio() {
   const setStatus = useRadioStore((s) => s.setStatus);
   const setSignal = useRadioStore((s) => s.setSignal);
   const setSignalSimulated = useRadioStore((s) => s.setSignalSimulated);
+  const addStation = useRadioStore((s) => s.addStation);
+  const removeStation = useRadioStore((s) => s.removeStation);
+  const currentStation = useRadioStore((s) => s.currentStation);
+  const stationsForBand = useRadioStore((s) => s.stationsForBand);
 
-  const station = STATIONS.find((s) => s.id === stationId) ?? STATIONS[0];
+  const station = currentStation();
 
   // Create audio element once
   useEffect(() => {
@@ -346,7 +350,10 @@ export function Radio() {
             stationId={stationId}
             powered={powered}
             onSelect={selectStation}
+            stations={stationsForBand(band)}
+            onRemove={removeStation}
           />
+          <StationEditor powered={powered} onAdd={addStation} onSelect={selectStation} />
           {errorMsg && powered && (
             <div className="mt-2 text-[10px] text-[#c41e3a] tracking-wide">
               ⚠ {errorMsg}
