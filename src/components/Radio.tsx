@@ -29,6 +29,7 @@ export function Radio() {
   const stationId = useRadioStore((s) => s.stationId);
   const status = useRadioStore((s) => s.status);
   const signal = useRadioStore((s) => s.signal);
+  const signalSimulated = useRadioStore((s) => s.signalSimulated);
   const errorMsg = useRadioStore((s) => s.errorMsg);
 
   const setPowered = useRadioStore((s) => s.setPowered);
@@ -38,6 +39,7 @@ export function Radio() {
   const selectStation = useRadioStore((s) => s.selectStation);
   const setStatus = useRadioStore((s) => s.setStatus);
   const setSignal = useRadioStore((s) => s.setSignal);
+  const setSignalSimulated = useRadioStore((s) => s.setSignalSimulated);
 
   const station = STATIONS.find((s) => s.id === stationId) ?? STATIONS[0];
 
@@ -102,6 +104,8 @@ export function Radio() {
       if (graph) graph.detachAnalyser();
       freqDataRef.current = null;
       smoothedSignalRef.current = 0;
+      // Sampler gone → the needle is neither real nor simulated anymore.
+      setSignalSimulated(false);
     };
 
     if (!powered) {
@@ -116,9 +120,11 @@ export function Radio() {
 
     // Simulated fallback (issue #8): used when WebAudio cannot tap the
     // element (no AudioContext, or a stream whose CORS policy taints it —
-    // the analyser then reads permanently silent).
+    // the analyser then reads permanently silent). The flag tells the UI to
+    // label the needle as synthetic (issue #15).
     const startSimulated = () => {
       if (signalTimer.current) window.clearInterval(signalTimer.current);
+      setSignalSimulated(true);
       signalTimer.current = window.setInterval(() => {
         const st = useRadioStore.getState().status;
         const vol = useRadioStore.getState().volume;
@@ -158,6 +164,9 @@ export function Radio() {
     }
     graph.resume();
     freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+    // Real analyser path is live → the needle reads the stream, not the
+    // fallback, so drop the SIM label (issue #15).
+    setSignalSimulated(false);
 
     let zeroTicks = 0;
     signalTimer.current = window.setInterval(() => {
@@ -286,6 +295,7 @@ export function Radio() {
               level={signal}
               powered={powered}
               playing={status === "playing"}
+              simulated={signalSimulated}
             />
           </div>
         </div>
