@@ -40,7 +40,12 @@ SOVIET_RADIO_LOG=/var/log/radio.log ./startup.sh
 ```
 
 Both modes listen on `0.0.0.0:8080`. If something is already listening on
-8080, `startup.sh` is a no-op (it assumes the app is already up).
+8080, `startup.sh` does not start a second server — it **announces the
+situation** instead: a notice on stdout (and in the `SOVIET_RADIO_LOG` file)
+naming the port, the PID that appears to own it (best-effort), and how to
+check or move it (e.g. `lsof -i :8080`). Exit code stays 0, so orchestrators
+that treat "port busy" as "already running" keep working; you just no longer
+get a silent no-op (issue #14).
 
 ## Features
 
@@ -49,10 +54,16 @@ Both modes listen on `0.0.0.0:8080`. If something is already listening on
 - **Power switch** with red pilot lamp + glowing valve tube
 - **Band selector** — ДВ / СВ / КВ / УКВ (LW / MW / SW / FM)
 - **Amber frequency dial** with scale, pointer, callsign readout
-- **S-meter** with live needle sway while playing
+- **S-meter** with live needle sway while playing; when the needle is a
+  **simulated fallback** (no WebAudio tap available, or a CORS-tainted
+  stream), the meter is labelled `СИМ / SIM` so a dead analyser never
+  masquerades as a real reading (issue #15)
 - **Speaker grille** visual
+- **Your own stations** — add, remove and tune user-defined stations per
+  band; they merge into the channel list and the TUNING dial and persist
+  across reloads (issue #16, see *User stations*)
 - **Cyrillic + English** panel labels
-- **Volume remembered** across reloads (localStorage)
+- **Volume & last dial-in remembered** across reloads (localStorage)
 - **12 working stations** via SomaFM HTTPS streams, presented as Soviet shortwave channels
 - **CI** — typecheck, tests and build on every push/PR
 
@@ -62,6 +73,28 @@ Both modes listen on `0.0.0.0:8080`. If something is already listening on
 2. Pick a band (СВ, КВ, УКВ…)
 3. Tap a channel in the list **or** drag the **НАСТРОЙКА** knob
 4. Adjust **ГРОМКОСТЬ**
+
+## User stations
+
+The built-in 12-station catalogue is seed data — your own dial-ins live on
+top of it:
+
+- **Add** — power on, open `＋ Своя станция · Add station` under the channel
+  list, enter a name, band and frequency (per-band dial range is enforced),
+  and an `http(s)` stream URL. The new station is saved, tagged `СВОЯ`, and
+  the dial jumps straight to it.
+- **Tune** — user stations are part of the band list, so the **НАСТРОЙКА**
+  knob and band switching walk them exactly like built-ins.
+- **Remove** — the `✕` on a `СВОЯ` row deletes it. Removing the currently
+  selected station falls back to the band's first station so the dial never
+  strands on a dead id.
+- **Merge policy** — within a band, a user station whose frequency collides
+  with a built-in *replaces* the built-in (your dial-in wins); all other
+  entries are inserted frequency-sorted.
+- **Persistence** — user stations are stored under the localStorage key
+  `soviet-radio-user-stations`; your last selected station, band, tuning and
+  power-on state survive a reload (including when they point at a user
+  station).
 
 ## Stack
 
@@ -80,7 +113,7 @@ Both modes listen on `0.0.0.0:8080`. If something is already listening on
 | `npm run build` | Production build (emits `dist/`) |
 | `npm run preview` | Serve the production build on `0.0.0.0:8080` |
 | `npm run typecheck` | TypeScript check |
-| `./startup.sh` | Serve prod build (or fall back to dev) on `0.0.0.0:8080`; no-op if 8080 is already up. See *Running in production* |
+| `./startup.sh` | Serve prod build (or fall back to dev) on `0.0.0.0:8080`; if 8080 is already taken it announces the owner PID instead of no-oping silently. See *Running in production* |
 
 ## Streams
 
