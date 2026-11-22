@@ -26,12 +26,13 @@ can be built, and falls back to the **dev server** if the build fails. See
 ./startup.sh                 # auto: prod build if possible, else dev
 ```
 
-Control it with two environment variables:
+Control it with three environment variables:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `SOVIET_RADIO_MODE` | `auto` | `auto` = production build if `dist/` exists or can be built, else dev server; `dev` = always the Vite dev server (hot reload); `prod` = always the production build, hard-fail if it cannot be built |
 | `SOVIET_RADIO_LOG` | `/tmp/soviet-radio.log` | Where the server logs are written |
+| `SOVIET_RADIO_PORT` | `8080` | Port the server listens on and the port-busy check probes |
 
 ```bash
 SOVIET_RADIO_MODE=dev ./startup.sh          # force dev server
@@ -40,12 +41,25 @@ SOVIET_RADIO_LOG=/var/log/radio.log ./startup.sh
 ```
 
 Both modes listen on `0.0.0.0:8080`. If something is already listening on
-8080, `startup.sh` does not start a second server — it **announces the
-situation** instead: a notice on stdout (and in the `SOVIET_RADIO_LOG` file)
-naming the port, the PID that appears to own it (best-effort), and how to
-check or move it (e.g. `lsof -i :8080`). Exit code stays 0, so orchestrators
-that treat "port busy" as "already running" keep working; you just no longer
-get a silent no-op (issue #14).
+the port, `startup.sh` does not start a second server — it **verifies who
+owns the port and announces the situation**: a notice on stdout (and in
+the `SOVIET_RADIO_LOG` file) naming the port and, best-effort, the PID
+that owns it (e.g. `lsof -i :8080` to see for yourself). The check looks
+for the app's own title marker in the served HTML, so the two cases are
+distinguished (issue #14, issue #18):
+
+- **soviet-radio itself** is already serving → "soviet-radio is already
+  up, nothing started", **exit 0** (orchestrators that treat "port busy"
+  as "already running" keep working).
+- **some other service** owns the port → "port N is held by an unknown
+  service (pid …) - soviet-radio was NOT started", **exit 1**, so a
+  no-op is no longer reported as success (previously any listener on the
+  port — e.g. an unrelated service — produced a false
+  "assuming soviet-radio is up" notice, exit 0).
+
+The port is fixed at 8080 by default; set `SOVIET_RADIO_PORT` to override
+it (used by the CI guard, `src/lib/startup-sh.test.ts`, which runs
+`startup.sh` against a stub responder on an ephemeral port).
 
 ## Features
 
